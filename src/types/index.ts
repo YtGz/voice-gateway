@@ -68,6 +68,7 @@ export interface AppConfig {
   picovoiceAccessKey: string;
   sillyTavernWsUrl: string;
   audioDeviceIndex: number;
+  audioOutputDeviceIndex: number;
   wakeWordSensitivity: number;
   wakewordsDir: string;
   characterMappings: CharacterMapping[];

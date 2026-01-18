@@ -9,7 +9,8 @@ export function loadConfig(): AppConfig {
   }
 
   const wsUrl = process.env.SILLYTAVERN_WS_URL ?? "ws://localhost:8000/ws/voice";
-  const deviceIndex = parseInt(process.env.AUDIO_DEVICE_INDEX ?? "0", 10);
+  const deviceIndex = parseInt(process.env.AUDIO_DEVICE_INDEX ?? "-1", 10);
+  const outputDeviceIndex = parseInt(process.env.AUDIO_OUTPUT_DEVICE_INDEX ?? "-1", 10);
   const sensitivity = parseFloat(process.env.WAKE_WORD_SENSITIVITY ?? "0.5");
   const wakewordsDir = process.env.WAKEWORDS_DIR ?? "./wakewords";
 
@@ -19,6 +20,7 @@ export function loadConfig(): AppConfig {
     picovoiceAccessKey: accessKey,
     sillyTavernWsUrl: wsUrl,
     audioDeviceIndex: deviceIndex,
+    audioOutputDeviceIndex: outputDeviceIndex,
     wakeWordSensitivity: sensitivity,
     wakewordsDir,
     characterMappings,

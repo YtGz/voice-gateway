@@ -6,7 +6,7 @@ import { CheetahSTT } from "./stt";
 import { OrcaTTS } from "./tts";
 import { CobraVAD } from "./vad";
 import { SillyTavernWsClient } from "./sillytavern";
-import { PvRecorderInput, SpeakerOutput } from "./audio";
+import { PvRecorderInput, PvSpeakerOutput } from "./audio";
 import { getLastCharacter, setLastCharacter, closeDb } from "./db";
 
 enum State {
@@ -18,8 +18,12 @@ enum State {
 
 async function main() {
   if (process.argv.includes("--list-devices")) {
-    console.log("Available audio devices:");
+    console.log("Available audio input devices:");
     PvRecorderInput.listDevices().forEach((device, i) => {
+      console.log(`  [${i}] ${device}`);
+    });
+    console.log("\nAvailable audio output devices:");
+    PvSpeakerOutput.listDevices().forEach((device, i) => {
       console.log(`  [${i}] ${device}`);
     });
     return;
@@ -51,7 +55,7 @@ async function main() {
   const tts = new OrcaTTS(config.picovoiceAccessKey);
   const stClient = new SillyTavernWsClient(config.sillyTavernWsUrl);
   const audioInput = new PvRecorderInput(config.audioDeviceIndex);
-  const audioOutput = new SpeakerOutput(22050);
+  const audioOutput = new PvSpeakerOutput(22050, config.audioOutputDeviceIndex);
 
   let state = State.LISTENING_FOR_WAKE_WORD;
   let targetCharacter: string | null = null;

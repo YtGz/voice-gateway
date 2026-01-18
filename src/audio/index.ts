@@ -1,2 +1,2 @@
 export { PvRecorderInput } from "./input";
-export { SpeakerOutput } from "./output";
+export { PvSpeakerOutput } from "./output";
