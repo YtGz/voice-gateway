@@ -92,4 +92,4 @@ The modular architecture allows swapping components:
 
 ## License
 
-MIT
+MIT-0
