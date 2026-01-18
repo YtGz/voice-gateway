@@ -1,0 +1,8 @@
+# Data directory
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Temporary audio files
+temp_audio_*.wav

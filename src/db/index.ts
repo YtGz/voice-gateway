@@ -1,7 +1,13 @@
 import Database from "better-sqlite3";
 import path from "path";
+import fs from "fs";
 
-const DB_PATH = path.join(process.cwd(), "voice-gateway.db");
+const DATA_DIR = process.env.DATA_DIR ?? process.cwd();
+const DB_PATH = path.join(DATA_DIR, "voice-gateway.db");
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 let db: Database.Database | null = null;
 

@@ -58,6 +58,63 @@ Development mode (auto-reload):
 bun run dev
 ```
 
+## Docker
+
+Build and run with Docker Compose:
+
+```bash
+# Build the image
+docker compose build
+
+# List audio devices inside container
+docker compose run --rm voice-gateway bun run start -- --list-devices
+
+# Start the service
+docker compose up -d
+```
+
+### Audio Setup (Linux)
+
+The container needs access to your audio device. Two options:
+
+**Option A: ALSA (default in docker-compose.yml)**
+- Passes `/dev/snd` directly to the container
+- Works with most USB audio devices
+
+**Option B: PulseAudio**
+- Uncomment the PulseAudio section in `docker-compose.yml`
+- Adjust the UID (1000) to match your user
+
+### Docker with SillyTavern
+
+Example `docker-compose.yml` including SillyTavern:
+
+```yaml
+services:
+  voice-gateway:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - SILLYTAVERN_WS_URL=ws://sillytavern:8000/ws/voice
+      - DATA_DIR=/app/data
+    volumes:
+      - ./wakewords:/app/wakewords:ro
+      - ./data:/app/data
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    depends_on:
+      - sillytavern
+
+  sillytavern:
+    image: ghcr.io/sillytavern/sillytavern:latest
+    volumes:
+      - ./st-config:/home/node/app/config
+      - ./st-data:/home/node/app/data
+```
+
 ## How It Works
 
 1. **Waiting for wake word** - The system listens for character names
