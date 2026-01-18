@@ -4,7 +4,7 @@ A modular voice gateway that connects wake-word detection, speech-to-text, and t
 
 ## Features
 
-- **Wake-word detection** using Picovoice Porcupine - each wake word routes to a specific character
+- **Wake-word detection** - Picovoice Porcupine or openWakeWord (free/open-source)
 - **Streaming speech-to-text** using Picovoice Cheetah
 - **Streaming text-to-speech** using Picovoice Orca
 - **SillyTavern integration** via WebSocket
@@ -14,8 +14,9 @@ A modular voice gateway that connects wake-word detection, speech-to-text, and t
 ## Prerequisites
 
 - [Bun](https://bun.sh/) runtime
-- [Picovoice Account](https://console.picovoice.ai/) for access key and custom wake words
+- [Picovoice Account](https://console.picovoice.ai/) for access key (if using Porcupine/Cheetah/Orca)
 - SillyTavern with WebSocket voice API running
+- Python 3 (only if using openWakeWord)
 
 ## Setup
 
@@ -30,16 +31,24 @@ A modular voice gateway that connects wake-word detection, speech-to-text, and t
    ```
 
 3. Edit `.env` with your settings:
-   - `PICOVOICE_ACCESS_KEY` - Your Picovoice access key
+   - `PICOVOICE_ACCESS_KEY` - Your Picovoice access key (required for Porcupine)
    - `SILLYTAVERN_WS_URL` - SillyTavern WebSocket URL (default: `ws://localhost:8000/ws/voice`)
-   - `AUDIO_DEVICE_INDEX` - Microphone device index
+   - `AUDIO_DEVICE_INDEX` - Microphone device index (-1 for auto-detect)
+   - `WAKEWORD_ENGINE` - `porcupine` (default) or `openwakeword`
    - `WAKE_WORD_SENSITIVITY` - Detection sensitivity (0.0-1.0)
 
-4. Create custom wake words for your characters at [Picovoice Console](https://console.picovoice.ai/):
-   - Create a wake word for each character name (e.g., "Luna", "Alice")
-   - Download the `.ppn` files
-   - Place them in the `wakewords/` directory
+4. Set up wake words for your characters:
+
+   **Option A: Picovoice Porcupine** (requires account)
+   - Create wake words at [Picovoice Console](https://console.picovoice.ai/)
+   - Download `.ppn` files and place in `wakewords/` directory
    - File names determine character mapping (e.g., `luna.ppn` → "Luna")
+   
+   **Option B: openWakeWord** (free, open-source)
+   - Install Python dependencies: `pip install openwakeword`
+   - Set `WAKEWORD_ENGINE=openwakeword` in `.env`
+   - Use pre-trained models or train custom ones
+   - Place `.onnx` or `.tflite` files in `wakewords/` directory
 
 ## Usage
 
@@ -189,12 +198,61 @@ src/
 ├── index.ts          # Main entry point & orchestrator
 ├── config.ts         # Configuration loading
 ├── types/            # TypeScript interfaces
-├── wakeword/         # Wake word detection (Porcupine)
+├── wakeword/         # Wake word detection (Porcupine, openWakeWord)
 ├── stt/              # Speech-to-text (Cheetah)
 ├── tts/              # Text-to-speech (Orca)
+├── vad/              # Voice activity detection (Cobra)
 ├── sillytavern/      # SillyTavern WebSocket client
 ├── audio/            # Audio input/output handling
 └── db/               # SQLite persistence
+scripts/
+└── openwakeword_server.py  # Python subprocess for openWakeWord
+```
+
+## Wake Word Engines
+
+### Picovoice Porcupine (Default)
+
+- Requires Picovoice account and access key
+- Custom wake words via Picovoice Console
+- `.ppn` files are tied to your account (don't share publicly)
+- Counts against monthly active user limits
+
+### openWakeWord (Alternative)
+
+- Free and open-source
+- No account required
+- Pre-trained models available (hey_jarvis, alexa, etc.)
+- Custom model training supported
+- Runs as Python subprocess
+
+To use openWakeWord:
+
+```bash
+# Install Python dependencies
+pip install openwakeword
+
+# Configure in .env
+WAKEWORD_ENGINE=openwakeword
+```
+
+## Docker with openWakeWord
+
+Use the openWakeWord-enabled Dockerfile:
+
+```bash
+docker build -f Dockerfile.openwakeword -t voice-gateway:openwakeword .
+```
+
+Or update `docker-compose.yml`:
+
+```yaml
+services:
+  voice-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.openwakeword
+    # ... rest of config
 ```
 
 ## Extending

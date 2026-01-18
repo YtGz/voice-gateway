@@ -70,6 +70,12 @@ export interface AppConfig {
   audioDeviceIndex: number;
   audioOutputDeviceIndex: number;
   wakeWordSensitivity: number;
+  wakewordEngine: "porcupine" | "openwakeword";
   wakewordsDir: string;
   characterMappings: CharacterMapping[];
+  openWakeWordConfig: {
+    pythonPath: string;
+    vadThreshold: number;
+    noiseSuppression: boolean;
+  };
 }

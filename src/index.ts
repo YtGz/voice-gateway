@@ -1,13 +1,14 @@
 import "@dotenvx/dotenvx/config";
 
 import { loadConfig } from "./config";
-import { PorcupineWakeWord } from "./wakeword";
+import { PorcupineWakeWord, OpenWakeWord } from "./wakeword";
 import { CheetahSTT } from "./stt";
 import { OrcaTTS } from "./tts";
 import { CobraVAD } from "./vad";
 import { SillyTavernWsClient } from "./sillytavern";
 import { PvRecorderInput, PvSpeakerOutput, resolveInputDevice, resolveOutputDevice } from "./audio";
 import { getLastCharacter, setLastCharacter, closeDb } from "./db";
+import type { WakeWordDetector } from "./types";
 
 enum State {
   LISTENING_FOR_WAKE_WORD = "LISTENING_FOR_WAKE_WORD",
@@ -38,7 +39,7 @@ async function main() {
 
   const config = loadConfig();
 
-  if (config.characterMappings.length === 0) {
+  if (config.characterMappings.length === 0 && config.wakewordEngine === "porcupine") {
     console.error("No wake word files found in:", config.wakewordsDir);
     console.error("Please add .ppn files for your characters.");
     console.error("Create custom wake words at: https://console.picovoice.ai/");
@@ -46,10 +47,16 @@ async function main() {
   }
 
   console.log("Initializing Voice Gateway...");
-  console.log("Characters configured:");
-  config.characterMappings.forEach((m) => {
-    console.log(`  - "${m.keyword}" → ${m.characterName}`);
-  });
+  console.log(`Wake word engine: ${config.wakewordEngine}`);
+  
+  if (config.characterMappings.length > 0) {
+    console.log("Characters configured:");
+    config.characterMappings.forEach((m) => {
+      console.log(`  - "${m.keyword}" → ${m.characterName}`);
+    });
+  } else if (config.wakewordEngine === "openwakeword") {
+    console.log("Using pre-trained openWakeWord models");
+  }
 
   const inputDevice = resolveInputDevice(config.audioDeviceIndex);
   const outputDevice = resolveOutputDevice(config.audioOutputDeviceIndex);
@@ -57,7 +64,19 @@ async function main() {
   console.log(`Audio input: ${inputDevice.name}${inputDevice.index >= 0 ? ` [${inputDevice.index}]` : ""}`);
   console.log(`Audio output: ${outputDevice.name}${outputDevice.index >= 0 ? ` [${outputDevice.index}]` : ""}`);
 
-  const wakeWord = new PorcupineWakeWord(config.picovoiceAccessKey, config.characterMappings);
+  let wakeWord: WakeWordDetector & { processAudio(frame: Int16Array): number };
+  
+  if (config.wakewordEngine === "openwakeword") {
+    wakeWord = new OpenWakeWord(config.characterMappings, {
+      pythonPath: config.openWakeWordConfig.pythonPath,
+      threshold: config.wakeWordSensitivity,
+      vadThreshold: config.openWakeWordConfig.vadThreshold,
+      noiseSuppression: config.openWakeWordConfig.noiseSuppression,
+    });
+  } else {
+    wakeWord = new PorcupineWakeWord(config.picovoiceAccessKey, config.characterMappings);
+  }
+
   const stt = new CheetahSTT(config.picovoiceAccessKey);
   const vad = new CobraVAD(config.picovoiceAccessKey, {
     voiceThreshold: 0.7,

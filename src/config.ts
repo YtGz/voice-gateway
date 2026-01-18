@@ -1,11 +1,21 @@
 import path from "path";
 import fs from "fs";
-import type { AppConfig, CharacterMapping } from "../types";
+import type { AppConfig, CharacterMapping } from "./types";
+
+export type WakeWordEngine = "porcupine" | "openwakeword";
+
+export interface OpenWakeWordConfig {
+  pythonPath: string;
+  vadThreshold: number;
+  noiseSuppression: boolean;
+}
 
 export function loadConfig(): AppConfig {
+  const wakewordEngine = (process.env.WAKEWORD_ENGINE ?? "porcupine") as WakeWordEngine;
+  
   const accessKey = process.env.PICOVOICE_ACCESS_KEY;
-  if (!accessKey) {
-    throw new Error("PICOVOICE_ACCESS_KEY environment variable is required");
+  if (wakewordEngine === "porcupine" && !accessKey) {
+    throw new Error("PICOVOICE_ACCESS_KEY environment variable is required for Porcupine");
   }
 
   const wsUrl = process.env.SILLYTAVERN_WS_URL ?? "ws://localhost:8000/ws/voice";
@@ -14,20 +24,32 @@ export function loadConfig(): AppConfig {
   const sensitivity = parseFloat(process.env.WAKE_WORD_SENSITIVITY ?? "0.5");
   const wakewordsDir = process.env.WAKEWORDS_DIR ?? "./wakewords";
 
-  const characterMappings = loadCharacterMappings(wakewordsDir, sensitivity);
+  const characterMappings = loadCharacterMappings(wakewordsDir, sensitivity, wakewordEngine);
+
+  const openWakeWordConfig: OpenWakeWordConfig = {
+    pythonPath: process.env.OPENWAKEWORD_PYTHON_PATH ?? "python3",
+    vadThreshold: parseFloat(process.env.OPENWAKEWORD_VAD_THRESHOLD ?? "0"),
+    noiseSuppression: process.env.OPENWAKEWORD_NOISE_SUPPRESSION === "true",
+  };
 
   return {
-    picovoiceAccessKey: accessKey,
+    picovoiceAccessKey: accessKey ?? "",
     sillyTavernWsUrl: wsUrl,
     audioDeviceIndex: deviceIndex,
     audioOutputDeviceIndex: outputDeviceIndex,
     wakeWordSensitivity: sensitivity,
+    wakewordEngine,
     wakewordsDir,
     characterMappings,
+    openWakeWordConfig,
   };
 }
 
-function loadCharacterMappings(wakewordsDir: string, defaultSensitivity: number): CharacterMapping[] {
+function loadCharacterMappings(
+  wakewordsDir: string, 
+  defaultSensitivity: number,
+  engine: WakeWordEngine
+): CharacterMapping[] {
   const absolutePath = path.resolve(wakewordsDir);
   
   if (!fs.existsSync(absolutePath)) {
@@ -35,10 +57,17 @@ function loadCharacterMappings(wakewordsDir: string, defaultSensitivity: number)
     return [];
   }
 
-  const files = fs.readdirSync(absolutePath).filter((f) => f.endsWith(".ppn"));
+  const extensions = engine === "porcupine" 
+    ? [".ppn"] 
+    : [".onnx", ".tflite"];
+  
+  const files = fs.readdirSync(absolutePath).filter((f) => 
+    extensions.some((ext) => f.endsWith(ext))
+  );
   
   return files.map((file) => {
-    const baseName = path.basename(file, ".ppn");
+    const ext = extensions.find((e) => file.endsWith(e)) ?? "";
+    const baseName = path.basename(file, ext);
     const characterName = baseName
       .split(/[-_]/)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
