@@ -85,6 +85,65 @@ The container needs access to your audio device. Two options:
 - Uncomment the PulseAudio section in `docker-compose.yml`
 - Adjust the UID (1000) to match your user
 
+### Finding Your Audio Device
+
+After connecting your USB speakerphone/microphone:
+
+1. **Verify the device is recognized by the host:**
+   ```bash
+   # List USB devices
+   lsusb
+   
+   # Example output - look for your device:
+   # Bus 001 Device 004: ID 2c31:0003 Beyerdynamic SPACE MAX
+   
+   # List ALSA recording devices
+   arecord -l
+   
+   # Example output:
+   # card 2: MAX [SPACE MAX], device 0: USB Audio [USB Audio]
+   #   Subdevices: 1/1
+   #   Subdevice #0: subdevice #0
+   ```
+
+2. **Find the device index inside the container:**
+   ```bash
+   docker compose run --rm voice-gateway bun run start -- --list-devices
+   
+   # Example output:
+   # Available audio devices:
+   #   [0] default
+   #   [1] sysdefault:CARD=MAX
+   #   [2] front:CARD=MAX,DEV=0
+   #   [3] ...
+   ```
+   
+   Look for your device name (e.g., "MAX" or "SPACE MAX") and note the index number in brackets.
+
+3. **Configure the device index in `.env`:**
+   ```bash
+   # Set the index from step 2
+   AUDIO_DEVICE_INDEX=1
+   ```
+
+4. **Test audio capture:**
+   ```bash
+   # Record a short test (requires alsa-utils in container)
+   docker compose run --rm voice-gateway arecord -d 3 -f cd test.wav
+   
+   # If you hear nothing or get errors, try a different device index
+   ```
+
+### Troubleshooting Audio
+
+| Problem | Solution |
+|---------|----------|
+| No devices listed | Check USB connection, verify device appears in `lsusb` |
+| Permission denied | Ensure `group_add: [audio]` is set, or add `privileged: true` |
+| Wrong device selected | Run `--list-devices` and try different indices |
+| Device busy | Stop other applications using the audio device |
+| No sound on Arch Linux | Install `alsa-utils`: `sudo pacman -S alsa-utils` |
+
 ### Docker with SillyTavern
 
 Example `docker-compose.yml` including SillyTavern:
