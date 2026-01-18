@@ -44,3 +44,11 @@ temp_audio_*.wav
 
 # Wake word files (user-specific)
 wakewords/*.ppn
+wakewords/*.onnx
+wakewords/*.tflite
+
+# Python
+.python-version
+__pycache__/
+*.pyc
+.venv/
