@@ -1,0 +1,1 @@
+export { PorcupineWakeWord } from "./porcupine";
