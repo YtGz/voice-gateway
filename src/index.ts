@@ -6,7 +6,7 @@ import { CheetahSTT } from "./stt";
 import { OrcaTTS } from "./tts";
 import { CobraVAD } from "./vad";
 import { SillyTavernWsClient } from "./sillytavern";
-import { PvRecorderInput, PvSpeakerOutput } from "./audio";
+import { PvRecorderInput, PvSpeakerOutput, resolveInputDevice, resolveOutputDevice } from "./audio";
 import { getLastCharacter, setLastCharacter, closeDb } from "./db";
 
 enum State {
@@ -18,13 +18,20 @@ enum State {
 
 async function main() {
   if (process.argv.includes("--list-devices")) {
+    const inputDevices = PvRecorderInput.listDevices();
+    const outputDevices = PvSpeakerOutput.listDevices();
+    const preferredInput = resolveInputDevice(-1);
+    const preferredOutput = resolveOutputDevice(-1);
+    
     console.log("Available audio input devices:");
-    PvRecorderInput.listDevices().forEach((device, i) => {
-      console.log(`  [${i}] ${device}`);
+    inputDevices.forEach((device, i) => {
+      const marker = i === preferredInput.index ? " ← auto-detected" : "";
+      console.log(`  [${i}] ${device}${marker}`);
     });
     console.log("\nAvailable audio output devices:");
-    PvSpeakerOutput.listDevices().forEach((device, i) => {
-      console.log(`  [${i}] ${device}`);
+    outputDevices.forEach((device, i) => {
+      const marker = i === preferredOutput.index ? " ← auto-detected" : "";
+      console.log(`  [${i}] ${device}${marker}`);
     });
     return;
   }
@@ -44,6 +51,12 @@ async function main() {
     console.log(`  - "${m.keyword}" → ${m.characterName}`);
   });
 
+  const inputDevice = resolveInputDevice(config.audioDeviceIndex);
+  const outputDevice = resolveOutputDevice(config.audioOutputDeviceIndex);
+  
+  console.log(`Audio input: ${inputDevice.name}${inputDevice.index >= 0 ? ` [${inputDevice.index}]` : ""}`);
+  console.log(`Audio output: ${outputDevice.name}${outputDevice.index >= 0 ? ` [${outputDevice.index}]` : ""}`);
+
   const wakeWord = new PorcupineWakeWord(config.picovoiceAccessKey, config.characterMappings);
   const stt = new CheetahSTT(config.picovoiceAccessKey);
   const vad = new CobraVAD(config.picovoiceAccessKey, {
@@ -54,8 +67,8 @@ async function main() {
   });
   const tts = new OrcaTTS(config.picovoiceAccessKey);
   const stClient = new SillyTavernWsClient(config.sillyTavernWsUrl);
-  const audioInput = new PvRecorderInput(config.audioDeviceIndex);
-  const audioOutput = new PvSpeakerOutput(22050, config.audioOutputDeviceIndex);
+  const audioInput = new PvRecorderInput(inputDevice.index);
+  const audioOutput = new PvSpeakerOutput(22050, outputDevice.index);
 
   let state = State.LISTENING_FOR_WAKE_WORD;
   let targetCharacter: string | null = null;
