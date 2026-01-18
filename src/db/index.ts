@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import path from "path";
 import fs from "fs";
 
@@ -9,12 +9,12 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-let db: Database.Database | null = null;
+let db: Database | null = null;
 
-function getDb(): Database.Database {
+function getDb(): Database {
   if (!db) {
     db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
+    db.exec("PRAGMA journal_mode = WAL");
     initSchema();
   }
   return db;
@@ -47,8 +47,7 @@ export function setLastCharacter(characterName: string): void {
        VALUES (?, ?, strftime('%s', 'now'))
        ON CONFLICT(key) DO UPDATE SET 
          value = excluded.value,
-         updated_at = strftime('%s', 'now')`
-    )
+         updated_at = strftime('%s', 'now')`)
     .run("last_character", characterName);
 }
 
