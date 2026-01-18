@@ -20,6 +20,17 @@ export interface TextToSpeech {
   release(): void;
 }
 
+export interface VoiceActivityDetector {
+  start(): void;
+  reset(): void;
+  processAudio(frame: Int16Array): {
+    voiceProbability: number;
+    isSpeaking: boolean;
+    shouldFinalize: boolean;
+  };
+  release(): void;
+}
+
 export interface AudioInput {
   start(): void;
   stop(): void;

@@ -4,6 +4,7 @@ import { loadConfig } from "./config";
 import { PorcupineWakeWord } from "./wakeword";
 import { CheetahSTT } from "./stt";
 import { OrcaTTS } from "./tts";
+import { CobraVAD } from "./vad";
 import { SillyTavernWsClient } from "./sillytavern";
 import { PvRecorderInput, SpeakerOutput } from "./audio";
 import { getLastCharacter, setLastCharacter, closeDb } from "./db";
@@ -41,6 +42,12 @@ async function main() {
 
   const wakeWord = new PorcupineWakeWord(config.picovoiceAccessKey, config.characterMappings);
   const stt = new CheetahSTT(config.picovoiceAccessKey);
+  const vad = new CobraVAD(config.picovoiceAccessKey, {
+    voiceThreshold: 0.7,
+    silenceThreshold: 0.3,
+    silenceDurationMs: 400,
+    minSpeechDurationMs: 200,
+  });
   const tts = new OrcaTTS(config.picovoiceAccessKey);
   const stClient = new SillyTavernWsClient(config.sillyTavernWsUrl);
   const audioInput = new PvRecorderInput(config.audioDeviceIndex);
@@ -49,14 +56,13 @@ async function main() {
   let state = State.LISTENING_FOR_WAKE_WORD;
   let targetCharacter: string | null = null;
   let transcriptBuffer = "";
-  let silenceFrames = 0;
-  const SILENCE_THRESHOLD = 30;
 
   const cleanup = () => {
     console.log("\nShutting down...");
     audioInput.release();
     wakeWord.release();
     stt.release();
+    vad.release();
     tts.release();
     stClient.disconnect();
     audioOutput.release();
@@ -80,6 +86,7 @@ async function main() {
 
     await wakeWord.start();
     stt.start();
+    vad.start();
 
     wakeWord.onWakeWord((characterName) => {
       if (state !== State.LISTENING_FOR_WAKE_WORD) return;
@@ -88,7 +95,7 @@ async function main() {
       targetCharacter = characterName;
       state = State.LISTENING_FOR_SPEECH;
       transcriptBuffer = "";
-      silenceFrames = 0;
+      vad.reset();
     });
 
     stt.onTranscript((transcript, isFinal) => {
@@ -96,14 +103,7 @@ async function main() {
 
       if (transcript) {
         transcriptBuffer += transcript;
-        silenceFrames = 0;
         process.stdout.write(`\rTranscribing: ${transcriptBuffer}`);
-      }
-
-      if (isFinal && transcriptBuffer.trim()) {
-        console.log(`\nFinal transcript: ${transcriptBuffer}`);
-        processUserInput(transcriptBuffer.trim());
-        transcriptBuffer = "";
       }
     });
 
@@ -111,7 +111,7 @@ async function main() {
       if (!targetCharacter) return;
 
       state = State.PROCESSING;
-      console.log(`Processing: "${text}" for ${targetCharacter}`);
+      console.log(`\nProcessing: "${text}" for ${targetCharacter}`);
 
       try {
         const currentChar = stClient.getCurrentCharacter();
@@ -151,14 +151,14 @@ async function main() {
       } else if (state === State.LISTENING_FOR_SPEECH) {
         stt.processAudio(frame);
         
-        silenceFrames++;
-        if (silenceFrames > SILENCE_THRESHOLD && transcriptBuffer.trim()) {
+        const { isSpeaking, shouldFinalize } = vad.processAudio(frame);
+        
+        if (shouldFinalize && transcriptBuffer.trim()) {
           const finalText = stt.flush();
           if (finalText) {
             transcriptBuffer += finalText;
           }
           if (transcriptBuffer.trim()) {
-            console.log(`\nFinal transcript (silence): ${transcriptBuffer}`);
             processUserInput(transcriptBuffer.trim());
             transcriptBuffer = "";
           }

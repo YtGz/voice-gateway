@@ -10,6 +10,7 @@
   "dependencies": {
     "@dotenvx/dotenvx": "^1.34.0",
     "@picovoice/cheetah-node": "^2.0.0",
+    "@picovoice/cobra-node": "^2.0.0",
     "@picovoice/orca-node": "^1.0.0",
     "@picovoice/porcupine-node": "^3.0.0",
     "@picovoice/pvrecorder-node": "^1.2.0",
