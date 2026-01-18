@@ -230,7 +230,7 @@ To use openWakeWord:
 
 ```bash
 # Install Python dependencies
-pip install openwakeword
+uv add openwakeword
 
 # Configure in .env
 WAKEWORD_ENGINE=openwakeword

@@ -8,14 +8,19 @@ RUN apt-get update && \
     alsa-utils \
     libasound2 \
     python3 \
-    python3-pip \
-    python3-venv \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create Python virtual environment and install openWakeWord
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir openwakeword
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Install openWakeWord with uv
+WORKDIR /opt/openwakeword
+RUN uv init && uv add openwakeword
+ENV PATH="/opt/openwakeword/.venv/bin:$PATH"
+
+WORKDIR /app
 
 # Install dependencies
 COPY package.json bun.lock ./
