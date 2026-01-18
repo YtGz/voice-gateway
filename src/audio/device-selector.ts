@@ -1,10 +1,19 @@
 import { PvRecorder } from "@picovoice/pvrecorder-node";
 import { PvSpeaker } from "@picovoice/pvspeaker-node";
 
-const PREFERRED_DEVICE_PATTERNS = [
+const DEFAULT_PATTERNS = [
   /space\s*max/i,
   /beyerdynamic/i,
+  /CARD=.*MAX/i,
 ];
+
+function getPreferredPatterns(): RegExp[] {
+  const envPatterns = process.env.PREFERRED_AUDIO_DEVICE_PATTERNS;
+  if (envPatterns) {
+    return envPatterns.split(",").map((p) => new RegExp(p.trim(), "i"));
+  }
+  return DEFAULT_PATTERNS;
+}
 
 export function findPreferredInputDevice(): number {
   const devices = PvRecorder.getAvailableDevices();
@@ -17,7 +26,8 @@ export function findPreferredOutputDevice(): number {
 }
 
 function findMatchingDevice(devices: string[]): number {
-  for (const pattern of PREFERRED_DEVICE_PATTERNS) {
+  const patterns = getPreferredPatterns();
+  for (const pattern of patterns) {
     const index = devices.findIndex((d) => pattern.test(d));
     if (index >= 0) {
       return index;
