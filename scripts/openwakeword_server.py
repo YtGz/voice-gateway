@@ -53,7 +53,7 @@ def main():
     try:
         from openwakeword.model import Model
     except ImportError:
-        emit({"type": "error", "message": "openwakeword not installed. Run: pip install openwakeword"})
+        emit({"type": "error", "message": "openwakeword not installed. Run: uv add openwakeword"})
         sys.exit(1)
 
     model_paths = args.models if args.models else None

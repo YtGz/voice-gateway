@@ -15,8 +15,8 @@ A modular voice gateway that connects wake-word detection, speech-to-text, and t
 
 - [Bun](https://bun.sh/) runtime
 - [Picovoice Account](https://console.picovoice.ai/) for access key (if using Porcupine/Cheetah/Orca)
-- SillyTavern with WebSocket voice API running
-- Python 3 (only if using openWakeWord)
+- [SillyTavern fork with WebSocket voice API](https://github.com/YtGz/SillyTavern)
+- Python 3 + [uv](https://github.com/astral-sh/uv) (only if using openWakeWord)
 
 ## Setup
 
@@ -45,10 +45,10 @@ A modular voice gateway that connects wake-word detection, speech-to-text, and t
    - File names determine character mapping (e.g., `luna.ppn` → "Luna")
    
    **Option B: openWakeWord** (free, open-source)
-   - Install Python dependencies: `pip install openwakeword`
+   - Install Python dependencies: `uv init && uv add openwakeword`
    - Set `WAKEWORD_ENGINE=openwakeword` in `.env`
    - Use pre-trained models or train custom ones
-   - Place `.onnx` or `.tflite` files in `wakewords/` directory
+   - Place `.onnx` files in `wakewords/` directory
 
 ## Usage
 
@@ -225,6 +225,9 @@ scripts/
 - Pre-trained models available (hey_jarvis, alexa, etc.)
 - Custom model training supported
 - Runs as Python subprocess
+- Use `.onnx` format for best performance on x86
+
+Pre-made wake word models: [home-assistant-wakewords-collection](https://github.com/fwartner/home-assistant-wakewords-collection)
 
 To use openWakeWord:
 
