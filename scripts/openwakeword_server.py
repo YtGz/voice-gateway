@@ -56,13 +56,15 @@ def main():
         emit({"type": "error", "message": "openwakeword not installed. Run: uv add openwakeword"})
         sys.exit(1)
 
-    model_paths = args.models if args.models else None
+    model_paths = args.models if args.models else []
     
     try:
+        vad_threshold = args.vad_threshold if args.vad_threshold and args.vad_threshold > 0 else 0
+            
         model = Model(
-            wakeword_models=model_paths,
+            wakeword_model_paths=model_paths,
             enable_speex_noise_suppression=args.noise_suppression,
-            vad_threshold=args.vad_threshold if args.vad_threshold > 0 else None,
+            vad_threshold=vad_threshold,
         )
     except Exception as e:
         emit({"type": "error", "message": f"Failed to load models: {e}"})
