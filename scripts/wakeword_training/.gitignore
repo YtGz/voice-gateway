@@ -1,0 +1,5 @@
+# Ignore everything in this folder except the notebook and this gitignore
+*
+!.gitignore
+!train_wakeword.ipynb
+!README.md
