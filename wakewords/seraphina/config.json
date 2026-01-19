@@ -1,0 +1,9 @@
+{
+  "wakewords": [
+    "Lara",
+    "Hey Lara",
+    "Miss Croft"
+  ],
+  "threshold": 0.5,
+  "model": "lara.onnx"
+}

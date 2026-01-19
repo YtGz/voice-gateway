@@ -10,6 +10,13 @@ export interface OpenWakeWordConfig {
   noiseSuppression: boolean;
 }
 
+export interface WakewordCharacterConfig {
+  wakewords: string[];
+  threshold?: number;
+  model?: string;
+  porcupine_model?: string;
+}
+
 export function loadConfig(): AppConfig {
   const wakewordEngine = (process.env.WAKEWORD_ENGINE ?? "porcupine") as WakeWordEngine;
   
@@ -57,29 +64,57 @@ function loadCharacterMappings(
     return [];
   }
 
-  const extensions = engine === "porcupine" 
-    ? [".ppn"] 
-    : [".onnx", ".tflite"];
-  
-  const files = fs.readdirSync(absolutePath).filter((f) => 
-    extensions.some((ext) => f.endsWith(ext))
-  );
-  
-  return files.map((file) => {
-    const ext = extensions.find((e) => file.endsWith(e)) ?? "";
-    const baseName = path.basename(file, ext);
-    const characterName = baseName
-      .split(/[-_]/)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
+  const mappings: CharacterMapping[] = [];
+  const entries = fs.readdirSync(absolutePath, { withFileTypes: true });
 
-    return {
-      keyword: baseName,
-      keywordPath: path.join(absolutePath, file),
-      characterName,
-      sensitivity: defaultSensitivity,
-    };
-  });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const charDir = path.join(absolutePath, entry.name);
+      const configPath = path.join(charDir, "config.json");
+      
+      if (fs.existsSync(configPath)) {
+        try {
+          const config: WakewordCharacterConfig = JSON.parse(
+            fs.readFileSync(configPath, "utf-8")
+          );
+          
+          const modelFile = engine === "porcupine" 
+            ? config.porcupine_model ?? "model.ppn"
+            : config.model ?? "model.onnx";
+          const modelPath = path.join(charDir, modelFile);
+          
+          if (fs.existsSync(modelPath)) {
+            mappings.push({
+              keyword: entry.name,
+              keywordPath: modelPath,
+              characterName: entry.name,
+              sensitivity: config.threshold ?? defaultSensitivity,
+            });
+          }
+        } catch (err) {
+          console.warn(`Failed to load config for ${entry.name}:`, err);
+        }
+      }
+    } else {
+      const ext = engine === "porcupine" ? ".ppn" : ".onnx";
+      if (entry.name.endsWith(ext) || (engine === "openwakeword" && entry.name.endsWith(".tflite"))) {
+        const baseName = path.basename(entry.name, path.extname(entry.name));
+        const characterName = baseName
+          .split(/[-_]/)
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(" ");
+
+        mappings.push({
+          keyword: baseName,
+          keywordPath: path.join(absolutePath, entry.name),
+          characterName,
+          sensitivity: defaultSensitivity,
+        });
+      }
+    }
+  }
+
+  return mappings;
 }
 
 export function loadMappingsFile(filePath: string): CharacterMapping[] {

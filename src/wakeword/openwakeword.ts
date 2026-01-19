@@ -1,10 +1,12 @@
 import { spawn, ChildProcess } from "child_process";
 import { createInterface, Interface } from "readline";
 import path from "path";
-import type { WakeWordDetector, CharacterMapping } from "../types";
+import type { WakeWordDetector } from "../types";
 
 interface OpenWakeWordConfig {
   pythonPath?: string;
+  wakewordsDir?: string;
+  characters?: string[];
   threshold?: number;
   frameSize?: number;
   vadThreshold?: number;
@@ -27,28 +29,25 @@ interface ErrorEvent {
   message: string;
 }
 
-type ServerEvent = DetectionEvent | ReadyEvent | ErrorEvent;
+interface WarningEvent {
+  type: "warning";
+  message: string;
+}
+
+type ServerEvent = DetectionEvent | ReadyEvent | ErrorEvent | WarningEvent;
 
 export class OpenWakeWord implements WakeWordDetector {
   private process: ChildProcess | null = null;
   private readline: Interface | null = null;
-  private characterMappings: CharacterMapping[];
-  private modelToCharacter: Map<string, string> = new Map();
   private callback: ((keyword: string) => void) | null = null;
   private config: OpenWakeWordConfig;
   private audioBuffer: Buffer = Buffer.alloc(0);
   private frameSize: number;
   private running = false;
 
-  constructor(characterMappings: CharacterMapping[], config: OpenWakeWordConfig = {}) {
-    this.characterMappings = characterMappings;
+  constructor(config: OpenWakeWordConfig = {}) {
     this.config = config;
     this.frameSize = config.frameSize ?? 1280;
-
-    for (const mapping of characterMappings) {
-      const modelName = path.basename(mapping.keywordPath, path.extname(mapping.keywordPath));
-      this.modelToCharacter.set(modelName, mapping.characterName);
-    }
   }
 
   async start(): Promise<void> {
@@ -59,8 +58,12 @@ export class OpenWakeWord implements WakeWordDetector {
 
     const args = [scriptPath];
     
-    if (this.characterMappings.length > 0) {
-      args.push("--models", ...this.characterMappings.map((m) => m.keywordPath));
+    if (this.config.wakewordsDir) {
+      args.push("--wakewords-dir", this.config.wakewordsDir);
+    }
+    
+    if (this.config.characters && this.config.characters.length > 0) {
+      args.push("--characters", ...this.config.characters);
     }
     
     if (this.config.threshold !== undefined) {
@@ -128,14 +131,17 @@ export class OpenWakeWord implements WakeWordDetector {
         break;
 
       case "detection":
-        const characterName = this.modelToCharacter.get(event.model) ?? event.model;
         if (this.callback) {
-          this.callback(characterName);
+          this.callback(event.model);
         }
         break;
 
       case "error":
         console.error(`openWakeWord error: ${event.message}`);
+        break;
+
+      case "warning":
+        console.warn(`openWakeWord warning: ${event.message}`);
         break;
     }
   }

@@ -67,7 +67,8 @@ async function main() {
   let wakeWord: WakeWordDetector & { processAudio(frame: Int16Array): number };
   
   if (config.wakewordEngine === "openwakeword") {
-    wakeWord = new OpenWakeWord(config.characterMappings, {
+    wakeWord = new OpenWakeWord({
+      wakewordsDir: config.wakewordsDir,
       pythonPath: config.openWakeWordConfig.pythonPath,
       threshold: config.wakeWordSensitivity,
       vadThreshold: config.openWakeWordConfig.vadThreshold,

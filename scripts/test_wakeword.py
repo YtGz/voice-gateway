@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
 Test script for wakeword detection with live microphone input.
-Usage: python scripts/test_wakeword.py [--model path/to/model.onnx] [--threshold 0.5]
+
+Usage:
+  python scripts/test_wakeword.py --wakewords-dir wakewords
+  python scripts/test_wakeword.py --wakewords-dir wakewords --characters seraphina
+  python scripts/test_wakeword.py --model path/to/model.onnx  # legacy mode
 """
 
 import sys
@@ -12,7 +16,9 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="Test wakeword detection with microphone")
-    parser.add_argument("--model", help="Path to .onnx model file")
+    parser.add_argument("--wakewords-dir", type=Path, help="Path to wakewords directory")
+    parser.add_argument("--characters", nargs="*", help="Specific characters to load")
+    parser.add_argument("--model", help="Direct path to .onnx model file (legacy mode)")
     parser.add_argument("--threshold", type=float, default=0.5, help="Detection threshold")
     parser.add_argument("--list-devices", action="store_true", help="List audio input devices")
     parser.add_argument("--device", type=int, help="Audio input device index")
@@ -32,8 +38,21 @@ def main():
     server_script = script_dir / "openwakeword_server.py"
 
     cmd = [sys.executable, str(server_script)]
-    if args.model:
+    
+    if args.wakewords_dir:
+        cmd.extend(["--wakewords-dir", str(args.wakewords_dir)])
+        if args.characters:
+            cmd.extend(["--characters", *args.characters])
+    elif args.model:
         cmd.extend(["--models", args.model])
+    else:
+        default_dir = script_dir.parent / "wakewords"
+        if default_dir.exists():
+            cmd.extend(["--wakewords-dir", str(default_dir)])
+            print(f"Using default wakewords directory: {default_dir}")
+        else:
+            print("No wakewords directory specified. Using pre-trained models.")
+    
     cmd.extend(["--threshold", str(args.threshold)])
 
     print(f"Starting wakeword server: {' '.join(cmd)}")
@@ -56,7 +75,6 @@ def main():
     stderr_thread = threading.Thread(target=read_stderr, daemon=True)
     stderr_thread.start()
 
-    # Wait for ready message
     ready_line = proc.stdout.readline().decode().strip()
     print(f"Server output: {ready_line}")
     
@@ -65,7 +83,10 @@ def main():
         if ready.get("type") == "error":
             print(f"Server error: {ready.get('message')}")
             sys.exit(1)
-        print(f"Models loaded: {ready.get('models', [])}")
+        models = ready.get('models', [])
+        print(f"Characters loaded: {models}")
+        if not models:
+            print("Warning: No models loaded!")
     except json.JSONDecodeError:
         print(f"Unexpected output: {ready_line}")
 
@@ -77,6 +98,8 @@ def main():
                     print(f"\n*** DETECTED: {event['model']} (score: {event['score']:.3f}) ***\n")
                 elif event.get("type") == "error":
                     print(f"Error: {event['message']}")
+                elif event.get("type") == "warning":
+                    print(f"Warning: {event['message']}")
             except json.JSONDecodeError:
                 pass
 
