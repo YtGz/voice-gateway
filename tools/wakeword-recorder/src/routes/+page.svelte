@@ -147,6 +147,7 @@
 		<header class="text-center mb-8">
 			<h1 class="text-3xl font-bold mb-2">🎙️ Wakeword Recorder</h1>
 			<p class="text-gray-400">Record wake word samples with automatic voice detection</p>
+			<a href="/test" class="text-blue-400 hover:text-blue-300 text-sm">→ Test trained model</a>
 		</header>
 		
 		<!-- Wakeword Input -->
