@@ -113,11 +113,6 @@ export class WakewordDetector {
 			this.melBuffer.push(frame);
 		}
 		
-		// Debug buffer status
-		if (Math.random() < 0.05) {
-			console.log('Buffers - mel:', this.melBuffer.length, '/', MEL_WINDOW_SIZE, 'emb:', this.embeddingBuffer.length, '/', EMBEDDING_WINDOW_SIZE);
-		}
-		
 		// Step 2: If we have enough mel frames, compute embedding
 		while (this.melBuffer.length >= MEL_WINDOW_SIZE) {
 			const melWindow = this.melBuffer.slice(0, MEL_WINDOW_SIZE);
@@ -138,11 +133,6 @@ export class WakewordDetector {
 			
 			// Ensure score is a valid number
 			const safeScore = typeof score === 'number' && !isNaN(score) ? score : 0;
-			
-			// Debug
-			if (Math.random() < 0.1) {
-				console.log('Score:', safeScore.toFixed(4), 'threshold:', this.threshold);
-			}
 			
 			this.lastScore = safeScore;
 			this.onScoreUpdate?.(safeScore);
@@ -246,13 +236,6 @@ export class WakewordDetector {
 			}
 		}
 		
-		// Debug: check input variance
-		if (Math.random() < 0.02) {
-			const min = Math.min(...Array.from(flatData));
-			const max = Math.max(...Array.from(flatData));
-			console.log('Embedding input - min:', min.toFixed(2), 'max:', max.toFixed(2));
-		}
-		
 		const inputTensor = new ort.Tensor('float32', flatData, [1, MEL_WINDOW_SIZE, MEL_BINS, 1]);
 		
 		const feeds: Record<string, ort.Tensor> = {};
@@ -270,13 +253,6 @@ export class WakewordDetector {
 			data = new Float32Array(0);
 		}
 		
-		// Debug: check embedding output variance
-		if (Math.random() < 0.02) {
-			const min = Math.min(...Array.from(data));
-			const max = Math.max(...Array.from(data));
-			console.log('Embedding output - length:', data.length, 'min:', min.toFixed(4), 'max:', max.toFixed(4));
-		}
-		
 		return Array.from(data);
 	}
 	
@@ -285,14 +261,6 @@ export class WakewordDetector {
 		
 		// Get actual embedding size from first embedding
 		const actualEmbeddingSize = embeddings[0]?.length || EMBEDDING_SIZE;
-		
-		// Debug: check embedding variance
-		if (Math.random() < 0.05) {
-			const allValues = embeddings.flat();
-			const min = Math.min(...allValues);
-			const max = Math.max(...allValues);
-			console.log('Wakeword input - embeddings:', embeddings.length, 'x', actualEmbeddingSize, 'range:', min.toFixed(2), 'to', max.toFixed(2));
-		}
 		
 		// Flatten embeddings - use actual size from embeddings
 		const flatData = new Float32Array(EMBEDDING_WINDOW_SIZE * actualEmbeddingSize);
@@ -325,17 +293,10 @@ export class WakewordDetector {
 			}
 		}
 		
-		// Debug: log raw score
-		if (Math.random() < 0.05) {
-			console.log('Wakeword raw output:', rawScore.toFixed(4), 'sigmoid:', (1 / (1 + Math.exp(-rawScore))).toFixed(4));
-		}
+		// Apply sigmoid to convert logits to probability
+		const sigmoid = 1 / (1 + Math.exp(-rawScore));
 		
-		// Check if output is already a probability (0-1 range) or needs sigmoid
-		// If raw scores are consistently near 0, try returning them directly
-		const needsSigmoid = Math.abs(rawScore) > 1;
-		const finalScore = needsSigmoid ? 1 / (1 + Math.exp(-rawScore)) : rawScore;
-		
-		return typeof finalScore === 'number' && !isNaN(finalScore) ? finalScore : 0;
+		return typeof sigmoid === 'number' && !isNaN(sigmoid) ? sigmoid : 0;
 	}
 	
 	setThreshold(threshold: number): void {

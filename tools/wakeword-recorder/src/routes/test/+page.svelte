@@ -5,6 +5,8 @@
 	// State
 	let isListening = $state(false);
 	let isLoading = $state(false);
+	let isTesting = $state(false);
+	let testResult = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let currentScore = $state(0);
 	let threshold = $state(0.5);
@@ -188,6 +190,97 @@
 		detections = [];
 	}
 	
+	async function testWithSample(type: 'positive_test' | 'negative_test') {
+		if (isTesting || !selectedModel) return;
+		
+		isTesting = true;
+		testResult = null;
+		error = null;
+		
+		try {
+			// Load a random sample
+			const sampleIndex = Math.floor(Math.random() * 200);
+			const response = await fetch(`/api/test-sample?wakeword=${selectedModel}&type=${type}&index=${sampleIndex}`);
+			const data = await response.json();
+			
+			if (data.error) {
+				throw new Error(data.error);
+			}
+			
+			// Decode audio data
+			const audioBytes = Uint8Array.from(atob(data.audioBase64), c => c.charCodeAt(0));
+			let audioData = new Float32Array(audioBytes.buffer);
+			
+			console.log(`Testing ${type} sample: ${data.file}, ${audioData.length} samples, ${data.sampleRate}Hz`);
+			
+			// Resample to 16kHz if needed
+			if (data.sampleRate !== SAMPLE_RATE) {
+				const ratio = data.sampleRate / SAMPLE_RATE;
+				const newLength = Math.floor(audioData.length / ratio);
+				const resampled = new Float32Array(newLength);
+				for (let i = 0; i < newLength; i++) {
+					resampled[i] = audioData[Math.floor(i * ratio)];
+				}
+				audioData = resampled;
+				console.log(`Resampled to ${audioData.length} samples at ${SAMPLE_RATE}Hz`);
+			}
+			
+			// Pad audio to ensure we have enough for the pipeline
+			// Need at least: 76 mel frames * 8 stride * 80ms chunks + 16 embeddings
+			const minSamples = SAMPLE_RATE * 5; // At least 5 seconds
+			if (audioData.length < minSamples) {
+				const padded = new Float32Array(minSamples);
+				// Center the audio
+				const offset = Math.floor((minSamples - audioData.length) / 2);
+				padded.set(audioData, offset);
+				audioData = padded;
+				console.log(`Padded to ${audioData.length} samples`);
+			}
+			
+			// Create detector
+			const modelInfo = availableModels.find(m => m.name === selectedModel);
+			if (!modelInfo) throw new Error('Model not found');
+			
+			const testDetector = new WakewordDetector({
+				melModelPath: '/api/models/melspectrogram.onnx',
+				embeddingModelPath: '/api/models/embedding_model.onnx',
+				wakewordModelPath: modelInfo.path,
+				threshold: 0.5,
+				onScoreUpdate: (score) => {
+					currentScore = score;
+					scoreHistory = [...scoreHistory.slice(1), score];
+				},
+			});
+			
+			await testDetector.initialize();
+			
+			// Process audio in chunks
+			let maxScore = 0;
+			const scores: number[] = [];
+			
+			for (let i = 0; i + CHUNK_SAMPLES <= audioData.length; i += CHUNK_SAMPLES) {
+				const chunk = audioData.slice(i, i + CHUNK_SAMPLES);
+				const result = await testDetector.processAudioChunk(chunk);
+				if (result) {
+					scores.push(result.score);
+					maxScore = Math.max(maxScore, result.score);
+				}
+			}
+			
+			testDetector.destroy();
+			
+			const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+			testResult = `${type}: ${data.file}\nMax score: ${maxScore.toFixed(4)}, Avg: ${avgScore.toFixed(4)}, Samples: ${scores.length}`;
+			console.log(testResult);
+			
+		} catch (e) {
+			console.error('Test failed:', e);
+			error = e instanceof Error ? e.message : 'Test failed';
+		} finally {
+			isTesting = false;
+		}
+	}
+
 	// Create audio worklet processor as a blob URL
 	function createProcessorScript(): string {
 		const processorCode = `
@@ -372,7 +465,7 @@
 			</div>
 			
 			<!-- Controls -->
-			<div class="flex justify-center gap-4">
+			<div class="flex justify-center gap-4 flex-wrap">
 				{#if !isListening}
 					<button
 						onclick={startListening}
@@ -395,6 +488,30 @@
 						</svg>
 						Stop Testing
 					</button>
+				{/if}
+			</div>
+			
+			<!-- Sample Test Buttons -->
+			<div class="mt-4 pt-4 border-t border-gray-700">
+				<p class="text-sm text-gray-400 text-center mb-3">Test with training samples:</p>
+				<div class="flex justify-center gap-4">
+					<button
+						onclick={() => testWithSample('positive_test')}
+						disabled={isTesting || !selectedModel || !hasBaseModels}
+						class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+					>
+						{isTesting ? 'Testing...' : 'Test Positive Sample'}
+					</button>
+					<button
+						onclick={() => testWithSample('negative_test')}
+						disabled={isTesting || !selectedModel || !hasBaseModels}
+						class="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+					>
+						{isTesting ? 'Testing...' : 'Test Negative Sample'}
+					</button>
+				</div>
+				{#if testResult}
+					<pre class="mt-3 p-3 bg-gray-900 rounded-lg text-xs text-gray-300 whitespace-pre-wrap">{testResult}</pre>
 				{/if}
 			</div>
 		</div>
