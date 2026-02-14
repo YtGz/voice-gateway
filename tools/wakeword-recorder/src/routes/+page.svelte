@@ -1,35 +1,31 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount, onDestroy } from 'svelte';
-	import { MicVAD, type RealTimeVADOptions } from '@ricky0123/vad-web';
+	import { MicVAD } from '@ricky0123/vad-web';
 	import { clips, type Clip } from '$lib/stores/clips';
 	import { exportClipsAsZip, downloadBlob } from '$lib/utils/export';
+	import { createWavBase64 } from '$lib/utils/audio';
 	import AudioMeter from '$lib/components/AudioMeter.svelte';
 	import ClipList from '$lib/components/ClipList.svelte';
 	
 	let isRecording = $state(false);
 	let isLoading = $state(false);
 	let isSpeaking = $state(false);
+	let isSaving = $state(false);
 	let audioLevel = $state(0);
 	let error = $state<string | null>(null);
+	let saveMessage = $state<string | null>(null);
 	let vad: MicVAD | null = $state(null);
 	let clipsList = $state<Clip[]>([]);
 	let sampleRate = $state(16000);
+	let wakeword = $state('Seraphina');
 	
 	clips.subscribe(value => {
 		clipsList = value;
 	});
 	
 	onMount(async () => {
-		// Preload the VAD model
-		isLoading = true;
-		try {
-			// Just check if we can load it
-			isLoading = false;
-		} catch (e) {
-			error = 'Failed to load VAD model';
-			isLoading = false;
-		}
+		isLoading = false;
 	});
 	
 	onDestroy(() => {
@@ -43,6 +39,7 @@
 		
 		isLoading = true;
 		error = null;
+		saveMessage = null;
 		
 		try {
 			vad = await MicVAD.new({
@@ -51,7 +48,6 @@
 				},
 				onSpeechEnd: (audio: Float32Array) => {
 					isSpeaking = false;
-					// Add the clip
 					clips.add(audio, sampleRate);
 				},
 				onVADMisfire: () => {
@@ -60,7 +56,6 @@
 				onFrameProcessed: (probs: { isSpeech: number }) => {
 					audioLevel = probs.isSpeech;
 				},
-				// Tuned for wake word recording
 				positiveSpeechThreshold: 0.5,
 				negativeSpeechThreshold: 0.35,
 				redemptionFrames: 8,
@@ -106,6 +101,44 @@
 		const timestamp = new Date().toISOString().slice(0, 10);
 		downloadBlob(zip, `wakeword-samples-${timestamp}.zip`);
 	}
+	
+	async function saveToTraining() {
+		if (clipsList.length === 0 || !wakeword.trim()) return;
+		
+		isSaving = true;
+		error = null;
+		saveMessage = null;
+		
+		try {
+			const clipsData = clipsList.map(clip => ({
+				wavData: createWavBase64(clip.audio, sampleRate)
+			}));
+			
+			const response = await fetch('/api/save', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					clips: clipsData,
+					wakeword: wakeword.trim(),
+					testRatio: 0.2
+				})
+			});
+			
+			const result = await response.json();
+			
+			if (!response.ok) {
+				throw new Error(result.error || 'Failed to save');
+			}
+			
+			saveMessage = `Saved ${result.trainCount} train + ${result.testCount} test clips`;
+			clips.clear();
+		} catch (e) {
+			console.error('Failed to save:', e);
+			error = e instanceof Error ? e.message : 'Failed to save clips';
+		} finally {
+			isSaving = false;
+		}
+	}
 </script>
 
 <div class="min-h-screen bg-gray-900 text-white">
@@ -115,6 +148,17 @@
 			<h1 class="text-3xl font-bold mb-2">🎙️ Wakeword Recorder</h1>
 			<p class="text-gray-400">Record wake word samples with automatic voice detection</p>
 		</header>
+		
+		<!-- Wakeword Input -->
+		<div class="bg-gray-800 rounded-2xl p-6 mb-6">
+			<label class="block text-sm text-gray-400 mb-2">Target Wake Word</label>
+			<input
+				type="text"
+				bind:value={wakeword}
+				placeholder="e.g., Seraphina"
+				class="w-full px-4 py-3 bg-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			/>
+		</div>
 		
 		<!-- Main Recording Area -->
 		<div class="bg-gray-800 rounded-2xl p-6 mb-6">
@@ -133,6 +177,10 @@
 						<p>⚠️ {error}</p>
 						<p class="text-sm mt-1">Please ensure microphone access is allowed</p>
 					</div>
+				{:else if saveMessage}
+					<div class="text-green-400">
+						<p>✓ {saveMessage}</p>
+					</div>
 				{:else if isRecording}
 					<div class="space-y-2">
 						{#if isSpeaking}
@@ -145,7 +193,7 @@
 							</div>
 						{:else}
 							<div class="text-gray-400">
-								<span>🎤 Listening... say your wake word</span>
+								<span>🎤 Listening... say "<span class="text-white font-medium">{wakeword}</span>"</span>
 							</div>
 						{/if}
 					</div>
@@ -203,15 +251,6 @@
 						>
 							Clear All
 						</button>
-						<button
-							onclick={exportAll}
-							class="px-4 py-2 text-sm bg-green-600 hover:bg-green-500 rounded-lg transition-colors flex items-center gap-2"
-						>
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-							</svg>
-							Export ZIP
-						</button>
 					{/if}
 				</div>
 			</div>
@@ -221,6 +260,44 @@
 				{sampleRate}
 				onDelete={deleteClip}
 			/>
+			
+			<!-- Export Actions -->
+			{#if clipsList.length > 0}
+				<div class="mt-6 pt-6 border-t border-gray-700">
+					<div class="flex flex-col sm:flex-row gap-3">
+						<button
+							onclick={saveToTraining}
+							disabled={isSaving || !wakeword.trim()}
+							class="flex-1 px-4 py-3 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+						>
+							{#if isSaving}
+								<svg class="animate-spin w-5 h-5" viewBox="0 0 24 24">
+									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+								</svg>
+								Saving...
+							{:else}
+								<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+								</svg>
+								Save to Training Folder
+							{/if}
+						</button>
+						<button
+							onclick={exportAll}
+							class="px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors flex items-center justify-center gap-2"
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+							</svg>
+							Export ZIP
+						</button>
+					</div>
+					<p class="text-xs text-gray-500 mt-2 text-center">
+						Save splits clips 80/20 into positive_train and positive_test folders
+					</p>
+				</div>
+			{/if}
 		</div>
 		
 		<!-- Tips -->

@@ -29,7 +29,7 @@ export function floatTo16BitPCM(float32Array: Float32Array): Int16Array {
 	return int16Array;
 }
 
-export function createWavBlob(audioData: Float32Array, sampleRate: number = TARGET_SAMPLE_RATE): Blob {
+export function createWavBuffer(audioData: Float32Array, sampleRate: number = TARGET_SAMPLE_RATE): ArrayBuffer {
 	const resampled = resampleAudio(audioData, sampleRate);
 	const pcmData = floatTo16BitPCM(resampled);
 	
@@ -62,7 +62,27 @@ export function createWavBlob(audioData: Float32Array, sampleRate: number = TARG
 	writeString(36, 'data');
 	view.setUint32(40, dataSize, true);
 	
-	return new Blob([wavHeader, pcmData.buffer], { type: 'audio/wav' });
+	// Combine header and data
+	const wavBuffer = new ArrayBuffer(44 + pcmData.buffer.byteLength);
+	const wavView = new Uint8Array(wavBuffer);
+	wavView.set(new Uint8Array(wavHeader), 0);
+	wavView.set(new Uint8Array(pcmData.buffer), 44);
+	
+	return wavBuffer;
+}
+
+export function createWavBlob(audioData: Float32Array, sampleRate: number = TARGET_SAMPLE_RATE): Blob {
+	return new Blob([createWavBuffer(audioData, sampleRate)], { type: 'audio/wav' });
+}
+
+export function createWavBase64(audioData: Float32Array, sampleRate: number = TARGET_SAMPLE_RATE): string {
+	const buffer = createWavBuffer(audioData, sampleRate);
+	const bytes = new Uint8Array(buffer);
+	let binary = '';
+	for (let i = 0; i < bytes.byteLength; i++) {
+		binary += String.fromCharCode(bytes[i]);
+	}
+	return btoa(binary);
 }
 
 export function createAudioUrl(audioData: Float32Array, sampleRate: number): string {
