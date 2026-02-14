@@ -131,17 +131,20 @@ export class WakewordDetector {
 			// Slide embedding buffer forward (by 1 for smooth detection)
 			this.embeddingBuffer.shift();
 			
-			this.lastScore = score;
-			this.onScoreUpdate?.(score);
+			// Ensure score is a valid number
+			const safeScore = typeof score === 'number' && !isNaN(score) ? score : 0;
 			
-			const detected = score >= this.threshold;
+			this.lastScore = safeScore;
+			this.onScoreUpdate?.(safeScore);
+			
+			const detected = safeScore >= this.threshold;
 			if (detected) {
-				this.onDetection?.(score);
+				this.onDetection?.(safeScore);
 			}
 			
 			return {
 				detected,
-				score,
+				score: safeScore,
 				timestamp: Date.now(),
 			};
 		}
@@ -236,35 +239,44 @@ export class WakewordDetector {
 	private async detectWakeword(embeddings: number[][]): Promise<number> {
 		if (!this.wakewordSession) throw new Error('Wakeword session not initialized');
 		
-		// Flatten embeddings into tensor
-		// Input shape: [1, 16, 96] or [1, 16 * 96]
-		const flatData = new Float32Array(EMBEDDING_WINDOW_SIZE * EMBEDDING_SIZE);
+		// Get actual embedding size from first embedding
+		const actualEmbeddingSize = embeddings[0]?.length || EMBEDDING_SIZE;
+		
+		// Flatten embeddings - use actual size from embeddings
+		const flatData = new Float32Array(EMBEDDING_WINDOW_SIZE * actualEmbeddingSize);
 		
 		for (let e = 0; e < EMBEDDING_WINDOW_SIZE; e++) {
-			for (let i = 0; i < EMBEDDING_SIZE; i++) {
-				flatData[e * EMBEDDING_SIZE + i] = embeddings[e]?.[i] ?? 0;
+			for (let i = 0; i < actualEmbeddingSize; i++) {
+				flatData[e * actualEmbeddingSize + i] = embeddings[e]?.[i] ?? 0;
 			}
 		}
 		
-		// Try different input shapes based on model requirements
-		let inputTensor: ort.Tensor;
-		try {
-			inputTensor = new ort.Tensor('float32', flatData, [1, EMBEDDING_WINDOW_SIZE, EMBEDDING_SIZE]);
-		} catch {
-			// Fall back to flattened shape
-			inputTensor = new ort.Tensor('float32', flatData, [1, EMBEDDING_WINDOW_SIZE * EMBEDDING_SIZE]);
-		}
+		// Model expects 3D input [1, 16, 96] based on error "Expected: 3"
+		const inputTensor = new ort.Tensor('float32', flatData, [1, EMBEDDING_WINDOW_SIZE, actualEmbeddingSize]);
 		
 		const feeds: Record<string, ort.Tensor> = {};
 		feeds[this.wakewordSession.inputNames[0]] = inputTensor;
 		
 		const results = await this.wakewordSession.run(feeds);
 		const output = results[this.wakewordSession.outputNames[0]];
-		// Handle both ORT tensor formats
-		const scores = (typeof output.getData === 'function' ? output.getData() : output.data) as Float32Array;
 		
-		// Return the wakeword score (usually first or max value)
-		return scores[0];
+		// Try multiple ways to access the data (ORT versions differ)
+		let rawScore = 0;
+		if (output.data && (output.data as Float32Array).length > 0) {
+			rawScore = (output.data as Float32Array)[0];
+		} else if ((output as any).cpuData && (output as any).cpuData.length > 0) {
+			rawScore = (output as any).cpuData[0];
+		} else if (typeof output.getData === 'function') {
+			const data = output.getData();
+			if (data && data.length > 0) {
+				rawScore = data[0];
+			}
+		}
+		
+		// Apply sigmoid since output is logits
+		const sigmoid = 1 / (1 + Math.exp(-rawScore));
+		
+		return typeof sigmoid === 'number' && !isNaN(sigmoid) ? sigmoid : 0;
 	}
 	
 	setThreshold(threshold: number): void {
