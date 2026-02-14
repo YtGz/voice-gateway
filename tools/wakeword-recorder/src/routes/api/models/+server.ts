@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 // Get the project root (voice-gateway) from the current file location
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..', '..');
+const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..');
 
 // Paths relative to voice-gateway root
 const WAKEWORDS_DIR = join(PROJECT_ROOT, 'scripts', 'wakewords');
