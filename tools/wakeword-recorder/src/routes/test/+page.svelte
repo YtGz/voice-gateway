@@ -19,9 +19,11 @@
 	let mediaStream: MediaStream | null = null;
 	let workletNode: AudioWorkletNode | null = null;
 	let detector: WakewordDetector | null = null;
+	let resampleRatio = 1;
 	
-	// Audio buffer for accumulating samples
+	// Audio buffer for accumulating samples (at target 16kHz rate)
 	let audioBuffer: Float32Array = new Float32Array(0);
+	let resampleBuffer: Float32Array = new Float32Array(0);
 	
 	// Score history for visualization
 	let scoreHistory = $state<number[]>(new Array(100).fill(0));
@@ -76,19 +78,21 @@
 			
 			await detector.initialize();
 			
-			// Set up audio capture
-			audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
-			
-			// Request microphone access
+			// Request microphone access first
 			mediaStream = await navigator.mediaDevices.getUserMedia({
 				audio: {
-					sampleRate: SAMPLE_RATE,
 					channelCount: 1,
 					echoCancellation: false,
 					noiseSuppression: false,
 					autoGainControl: false,
 				},
 			});
+			
+			// Create AudioContext matching the stream's sample rate, then resample if needed
+			const track = mediaStream.getAudioTracks()[0];
+			const streamSampleRate = track.getSettings().sampleRate || 48000;
+			audioContext = new AudioContext({ sampleRate: streamSampleRate });
+			resampleRatio = streamSampleRate / SAMPLE_RATE;
 			
 			// Create audio worklet for processing
 			await audioContext.audioWorklet.addModule(createProcessorScript());
@@ -101,10 +105,23 @@
 				
 				const inputData = event.data as Float32Array;
 				
-				// Accumulate samples
-				const newBuffer = new Float32Array(audioBuffer.length + inputData.length);
+				// Resample to 16kHz if needed
+				let resampled: Float32Array;
+				if (resampleRatio > 1) {
+					const outputLength = Math.floor(inputData.length / resampleRatio);
+					resampled = new Float32Array(outputLength);
+					for (let i = 0; i < outputLength; i++) {
+						const srcIndex = Math.floor(i * resampleRatio);
+						resampled[i] = inputData[srcIndex];
+					}
+				} else {
+					resampled = inputData;
+				}
+				
+				// Accumulate resampled samples
+				const newBuffer = new Float32Array(audioBuffer.length + resampled.length);
 				newBuffer.set(audioBuffer);
-				newBuffer.set(inputData, audioBuffer.length);
+				newBuffer.set(resampled, audioBuffer.length);
 				audioBuffer = newBuffer;
 				
 				// Process complete chunks
@@ -155,6 +172,8 @@
 		}
 		
 		audioBuffer = new Float32Array(0);
+		resampleBuffer = new Float32Array(0);
+		resampleRatio = 1;
 		isListening = false;
 	}
 	

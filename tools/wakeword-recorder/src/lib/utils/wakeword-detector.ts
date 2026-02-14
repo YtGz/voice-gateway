@@ -55,8 +55,8 @@ export class WakewordDetector {
 	}
 	
 	async initialize(): Promise<void> {
-		// Set ONNX Runtime Web to use WASM backend
-		ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+		// Set ONNX Runtime Web to use WASM backend (must match installed version)
+		ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.1/dist/';
 		
 		try {
 			// Load all models in parallel
@@ -179,7 +179,8 @@ export class WakewordDetector {
 		
 		const results = await this.melSession.run(feeds);
 		const output = results[this.melSession.outputNames[0]];
-		const melData = output.data as Float32Array;
+		// Handle both ORT tensor formats (older uses getData(), newer uses .data)
+		const melData = (typeof output.getData === 'function' ? output.getData() : output.data) as Float32Array;
 		
 		// Apply transformation: (value / 10.0) + 2.0
 		const transformedData = new Float32Array(melData.length);
@@ -226,8 +227,10 @@ export class WakewordDetector {
 		
 		const results = await this.embeddingSession.run(feeds);
 		const output = results[this.embeddingSession.outputNames[0]];
+		// Handle both ORT tensor formats
+		const data = (typeof output.getData === 'function' ? output.getData() : output.data) as Float32Array;
 		
-		return Array.from(output.data as Float32Array);
+		return Array.from(data);
 	}
 	
 	private async detectWakeword(embeddings: number[][]): Promise<number> {
@@ -257,7 +260,8 @@ export class WakewordDetector {
 		
 		const results = await this.wakewordSession.run(feeds);
 		const output = results[this.wakewordSession.outputNames[0]];
-		const scores = output.data as Float32Array;
+		// Handle both ORT tensor formats
+		const scores = (typeof output.getData === 'function' ? output.getData() : output.data) as Float32Array;
 		
 		// Return the wakeword score (usually first or max value)
 		return scores[0];
