@@ -188,17 +188,18 @@ export class WakewordDetector {
 			transformedData[i] = (melData[i] / 10.0) + 2.0;
 		}
 		
-		// Reshape into frames (5 frames x 32 mel bins typically)
-		// Output shape is [1, 5, N] where N is mel bins
+		// Output shape is [1, 32, 5] where 32 is mel bins, 5 is frames
 		const dims = output.dims as number[];
-		const numFrames = dims[1] || MEL_FRAMES_PER_CHUNK;
-		const melBins = dims[2] || Math.floor(transformedData.length / numFrames);
+		const melBins = dims[1] || 32;
+		const numFrames = dims[2] || MEL_FRAMES_PER_CHUNK;
 		
+		// Reshape: data is [mel_bins, frames], we want array of frames where each frame has mel_bins
 		const frames: number[][] = [];
 		for (let f = 0; f < numFrames; f++) {
 			const frame: number[] = [];
 			for (let b = 0; b < melBins; b++) {
-				frame.push(transformedData[f * melBins + b]);
+				// Data is in [mel_bin][frame] order
+				frame.push(transformedData[b * numFrames + f]);
 			}
 			frames.push(frame);
 		}
@@ -209,18 +210,17 @@ export class WakewordDetector {
 	private async computeEmbedding(melFrames: number[][]): Promise<number[]> {
 		if (!this.embeddingSession) throw new Error('Embedding session not initialized');
 		
-		// Flatten mel frames into tensor
-		// Input shape: [1, 76, mel_bins]
-		const melBins = melFrames[0].length;
-		const flatData = new Float32Array(MEL_WINDOW_SIZE * melBins);
+		// Input shape: [1, 76, 32, 1] (batch, frames, mel_bins, channel)
+		const MEL_BINS = 32;
+		const flatData = new Float32Array(MEL_WINDOW_SIZE * MEL_BINS);
 		
 		for (let f = 0; f < MEL_WINDOW_SIZE; f++) {
-			for (let b = 0; b < melBins; b++) {
-				flatData[f * melBins + b] = melFrames[f][b];
+			for (let b = 0; b < MEL_BINS; b++) {
+				flatData[f * MEL_BINS + b] = melFrames[f]?.[b] ?? 0;
 			}
 		}
 		
-		const inputTensor = new ort.Tensor('float32', flatData, [1, MEL_WINDOW_SIZE, melBins]);
+		const inputTensor = new ort.Tensor('float32', flatData, [1, MEL_WINDOW_SIZE, MEL_BINS, 1]);
 		
 		const feeds: Record<string, ort.Tensor> = {};
 		feeds[this.embeddingSession.inputNames[0]] = inputTensor;
