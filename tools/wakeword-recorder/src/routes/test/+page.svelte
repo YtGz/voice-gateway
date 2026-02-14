@@ -1,5 +1,4 @@
 <script lang="ts">
-	import '../app.css';
 	import { onMount, onDestroy } from 'svelte';
 	import { WakewordDetector, SAMPLE_RATE, CHUNK_SAMPLES } from '$lib/utils/wakeword-detector';
 
