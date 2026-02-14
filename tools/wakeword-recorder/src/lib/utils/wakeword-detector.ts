@@ -182,8 +182,16 @@ export class WakewordDetector {
 		
 		const results = await this.melSession.run(feeds);
 		const output = results[this.melSession.outputNames[0]];
-		// Handle both ORT tensor formats (older uses getData(), newer uses .data)
-		const melData = (typeof output.getData === 'function' ? output.getData() : output.data) as Float32Array;
+		
+		// Handle both ORT tensor formats
+		let melData: Float32Array;
+		if (output.data && (output.data as Float32Array).length > 0) {
+			melData = output.data as Float32Array;
+		} else if ((output as any).cpuData) {
+			melData = (output as any).cpuData;
+		} else {
+			melData = new Float32Array(0);
+		}
 		
 		// Apply transformation: (value / 10.0) + 2.0
 		const transformedData = new Float32Array(melData.length);
@@ -191,18 +199,17 @@ export class WakewordDetector {
 			transformedData[i] = (melData[i] / 10.0) + 2.0;
 		}
 		
-		// Output shape is [1, 32, 5] where 32 is mel bins, 5 is frames
+		// Output shape is [1, 1, 5, 32] = [batch, channel, frames, mel_bins]
 		const dims = output.dims as number[];
-		const melBins = dims[1] || 32;
 		const numFrames = dims[2] || MEL_FRAMES_PER_CHUNK;
+		const melBins = dims[3] || 32;
 		
-		// Reshape: data is [mel_bins, frames], we want array of frames where each frame has mel_bins
+		// Reshape: data is in [frame][mel_bin] order (row-major for last two dims)
 		const frames: number[][] = [];
 		for (let f = 0; f < numFrames; f++) {
 			const frame: number[] = [];
 			for (let b = 0; b < melBins; b++) {
-				// Data is in [mel_bin][frame] order
-				frame.push(transformedData[b * numFrames + f]);
+				frame.push(transformedData[f * melBins + b]);
 			}
 			frames.push(frame);
 		}
