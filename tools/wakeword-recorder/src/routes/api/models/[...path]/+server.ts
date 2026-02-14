@@ -1,12 +1,16 @@
 import type { RequestHandler } from './$types';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-// Paths relative to the wakeword-recorder directory
-const WAKEWORDS_DIR = '../../../../scripts/wakewords';
-// Look in the cloned openwakeword repo's resources folder (where training notebook downloads them)
-const OPENWAKEWORD_MODELS_DIR = '../../../../scripts/wakeword_training/openwakeword/openwakeword/resources/models';
+// Get the project root (voice-gateway) from the current file location
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..', '..', '..');
+
+// Paths relative to voice-gateway root
+const WAKEWORDS_DIR = join(PROJECT_ROOT, 'scripts', 'wakewords');
+const OPENWAKEWORD_MODELS_DIR = join(PROJECT_ROOT, 'scripts', 'wakeword_training', 'openwakeword', 'openwakeword', 'resources', 'models');
 
 export const GET: RequestHandler = async ({ params }) => {
 	const requestedPath = params.path;
@@ -26,11 +30,11 @@ export const GET: RequestHandler = async ({ params }) => {
 	}
 	
 	// Check in wakewords directory first
-	let filePath = join(process.cwd(), WAKEWORDS_DIR, requestedPath);
+	let filePath = join(WAKEWORDS_DIR, requestedPath);
 	
 	// If not found, check in openwakeword resources directory (for melspectrogram.onnx and embedding_model.onnx)
 	if (!existsSync(filePath)) {
-		filePath = join(process.cwd(), OPENWAKEWORD_MODELS_DIR, requestedPath);
+		filePath = join(OPENWAKEWORD_MODELS_DIR, requestedPath);
 	}
 	
 	if (!existsSync(filePath)) {

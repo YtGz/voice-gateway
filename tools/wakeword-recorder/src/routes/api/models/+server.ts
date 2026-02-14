@@ -1,17 +1,22 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-// Paths relative to project root
-const WAKEWORDS_DIR = '../../../scripts/wakewords';
-const OPENWAKEWORD_MODELS_DIR = '../../../scripts/wakeword_training/openwakeword/openwakeword/resources/models';
+// Get the project root (voice-gateway) from the current file location
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..', '..');
+
+// Paths relative to voice-gateway root
+const WAKEWORDS_DIR = join(PROJECT_ROOT, 'scripts', 'wakewords');
+const OPENWAKEWORD_MODELS_DIR = join(PROJECT_ROOT, 'scripts', 'wakeword_training', 'openwakeword', 'openwakeword', 'resources', 'models');
 
 export const GET: RequestHandler = async () => {
 	try {
-		const wakewordsPath = join(process.cwd(), WAKEWORDS_DIR);
-		const baseModelsPath = join(process.cwd(), OPENWAKEWORD_MODELS_DIR);
+		const wakewordsPath = WAKEWORDS_DIR;
+		const baseModelsPath = OPENWAKEWORD_MODELS_DIR;
 		
 		// Check for base models
 		const hasMelModel = existsSync(join(baseModelsPath, 'melspectrogram.onnx'));
